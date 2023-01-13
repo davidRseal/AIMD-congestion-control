@@ -1,4 +1,4 @@
-#AIMD-congestion-control
+<h1>AIMD-congestion-control</h1>
 
 This is a multithreaded utility to handle a number of callable "tasks" when downstream conditions are sensitive or unknown.
 
@@ -6,7 +6,7 @@ The inspiration is the Additive-Increase-Multiplicative-Decrease (AIMD) algorith
 This utility could be used to the same effect with HTTP requests, but could also work with database queries or
 whatever other sensitive dependencies there might be downstream.
 
-##How it works
+<h2>How it works</h2>
 
 It works by initiating _n_ worker threads, then adding new threads every time _n_ tasks are successfully completed. 
 This in turn increases _n_ and the work is completed with linearly increasing speed.
@@ -29,7 +29,7 @@ responding to changes in bandwidth.
 
 ![Example](images/example.PNG)
 
-##Code Examples
+<h2>Code Examples</h2>
 
 Let's say we need information for a list of users but our datasource can only handle so many requests at a time.
 
@@ -94,7 +94,7 @@ try {
 }
 ```
 
-##Known Issues
+<h2>Known Issues</h2>
 This tool is not super stable. Multithreading is hard to debug and whenever I think I've got it stable some new issue
 seems to pop up that I can't yet explain. 
 * Sometimes all worker threads just stop working. They don't return, they just stop, which locks up the entire tool.
