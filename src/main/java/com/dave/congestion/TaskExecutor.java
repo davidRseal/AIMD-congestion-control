@@ -4,8 +4,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+// TODO: There are definitely stability issues.
 public class TaskExecutor<T> {
     private final List<Callable<T>> tasks;
     private final List<T> taskResponses = new ArrayList<>();
@@ -16,6 +18,8 @@ public class TaskExecutor<T> {
     private int initialCount;
     private final int numOriginalTasks;
     private int throttleThreshold;
+    private final AtomicBoolean throttleMode = new AtomicBoolean(false);
+    private final AtomicBoolean throttleRecoveryMode = new AtomicBoolean(true);
     private final AtomicInteger numErroredSinceLastThrottle = new AtomicInteger(0);
     private final AtomicInteger numSentInCurrentWindow = new AtomicInteger(0);
     private final AtomicInteger numConsumersTarget = new AtomicInteger();
@@ -37,20 +41,32 @@ public class TaskExecutor<T> {
     }
 
     public List<T> execute() throws InterruptedException {
-        for (int i = 0; i < initialCount; i++) {
+        initializeThreads(initialCount);
+
+        while (!isFinished()) {
+            if (throttleRecoveryMode.get()) {
+                initializeThreads(numConsumersTarget.get());
+                throttleRecoveryMode.set(false);
+            }
+            Thread.sleep(1);
+        }
+        cleanUpThreads();
+
+        return taskResponses;
+    }
+
+    private void initializeThreads(int numThreads) {
+        for (int i = 0; i < numThreads; i++) {
             Thread newThread = new Thread(new Consumer<>(this), "Thread-" + consumerThreads.size());
             consumerThreads.add(newThread);
             newThread.start();
         }
+    }
 
-        while (!isFinished()) {
-            Thread.sleep(1);
-        }
+    private void cleanUpThreads() {
         for (Thread thread : consumerThreads) {
             thread.interrupt();
         }
-
-        return taskResponses;
     }
 
     private void addConsumer() {
@@ -63,27 +79,40 @@ public class TaskExecutor<T> {
     }
 
     private void throttleConsumers() {
-        int target = numConsumersTarget.get();
-        int newTarget = (int) (target * decreaseCoefficient);
-        // throttle only if there will be at least 1 consumer and if it's not already throttling
-        if (newTarget >= 1 && !shouldThrottle()) {
+        throttleMode.set(true);
+        int currentTarget = numConsumersTarget.get();
+        int newTarget = (int) (currentTarget * decreaseCoefficient);
+        // throttle only if there will be at least 1 consumer
+        if (newTarget >= 1) {
             numConsumersTarget.set(newTarget);
             numTimesThrottled.getAndIncrement();
         }
     }
 
     protected void requeueTask(Callable<T> task) {
+        tasks.add(task);
+
+        if (shouldThrottle()) {
+            return;
+        }
+
         numErroredSinceLastThrottle.getAndIncrement();
         if (numErroredSinceLastThrottle.get() >= throttleThreshold) {
             numErroredSinceLastThrottle.set(0);
             throttleConsumers();
         }
-        tasks.add(task);
     }
 
     protected Callable<T> consumeTask() {
         if (tasks.size() > 0) {
             if (shouldThrottle()) {
+
+                // If there's only 1 left and it's about to be deleted it's time to enter recovery mode
+                if (consumerThreads.size() == 1) {
+                    throttleMode.set(false);
+                    throttleRecoveryMode.set(true);
+                }
+
                 // remove this thread from consumerThreads, then return null so this thread returns
                 consumerThreads.remove(Thread.currentThread());
                 return null;
@@ -122,7 +151,7 @@ public class TaskExecutor<T> {
     }
 
     private boolean shouldThrottle() {
-        return consumerThreads.size() > numConsumersTarget.get();
+        return throttleMode.get();
     }
 
     private boolean shouldAddConsumer() {
