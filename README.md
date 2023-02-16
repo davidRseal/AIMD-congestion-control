@@ -97,8 +97,7 @@ try {
 <h2>Known Issues</h2>
 This tool is not super stable. Multithreading is hard to debug and whenever I think I've got it stable some new issue
 seems to pop up that I can't yet explain. 
-* Sometimes all worker threads just stop working. They don't return, they just stop, which locks up the entire tool.
-* Maybe it's just my testing setup, but it seems that if I run it enough times in a row it slows way down. 
-Maybe I'm making too many threads?
+- Sometimes all worker threads just stop working. They don't return, they just stop, which locks up the entire tool.
+- Maybe it's just my testing setup, but it seems that if I run it enough times in a row it slows way down. Maybe I'm making too many threads?
 
 
